@@ -1,0 +1,10 @@
+exp_id,model_name,input_size,augmentation,lr,batch_size,epochs,val_acc,test_acc,macro_f1,inference_time_ms,model_size_mb,notes
+EXP_01,custom_cnn,64x64,Rot(12deg)+ColorJitter,0.001,32,5,17.39,14.81,0.1147,3.59,8.92,SignNet-Lite Baseline
+EXP_01_SANITY,custom_cnn,64x64,Rot(12deg)+ColorJitter,0.001,32,5,17.39,3.18,0.0232,3.63,8.92,SignNet-Lite Sanity Check (3500 samples)
+EXP_01,custom_cnn,64x64,Rot(12deg)+ColorJitter,0.001,32,5,17.39,3.18,0.0232,1.97,8.92,Baseline evaluation
+EXP_01,custom_cnn,64x64,Rot(12deg)+ColorJitter,0.001,32,5,99.05,98.92,0.9895,1.97,8.92,Baseline evaluation
+EXP-TL-01,mobilenet_v2,64x64,Rot(12deg)+ColorJitter,0.001,32,5,60.34,59.51,0.5724,24.14,9.35,MobileNetV2 Phase A: Frozen ImageNet backbone
+EXP-TL-02,mobilenet_v2,64x64,Rot(12deg)+ColorJitter,0.001,32,5,98.57,98.4,0.9829,28.53,26.44,MobileNetV2 Phase B: Unfreeze top 4 residual blocks
+EXP-TL-03,resnet18,64x64,Rot(12deg)+ColorJitter,0.001,32,5,54.25,54.5,0.4822,33.95,42.97,ResNet18 Phase A: Frozen ImageNet backbone
+EXP-TL-04,resnet18,64x64,Rot(12deg)+ColorJitter,0.001,32,4,99.42,99.67,0.9972,10.94,128.28,ResNet18 Phase B: Unfreeze layer4 + head
+EXP_01,custom_cnn,64x64,Rot(12deg)+ColorJitter,0.001,32,5,99.05,98.92,0.9895,3.82,8.92,Baseline evaluation
