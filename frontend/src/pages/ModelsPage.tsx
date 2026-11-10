@@ -19,14 +19,14 @@ export const ModelsPage: React.FC = () => {
   const activeModel = models.find((m) => m.id === selectedModel) || models[0];
 
   return (
-    <div className="space-y-8 py-4">
+    <div className="space-y-8 py-2">
       {/* Title */}
-      <div className="border-b border-stone-200 pb-5">
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+      <div className="border-b border-[#E5E2DC] pb-5">
+        <h1 className="text-2xl font-bold text-[#171717] tracking-tight">
           Neural Architecture Registry &amp; Model Specifications
         </h1>
-        <p className="text-xs text-stone-600 mt-1">
-          Detailed inspection of convolutional layers, bottleneck residual blocks, checkpoint state dictionaries, and Grad-CAM target layer hooks.
+        <p className="text-xs text-[#66645F] mt-1">
+          Technical specifications for baseline convolutional networks, inverted residual bottlenecks, checkpoint state dictionaries, and Grad-CAM layer hooks.
         </p>
       </div>
 
@@ -40,20 +40,20 @@ export const ModelsPage: React.FC = () => {
               onClick={() => setSelectedModel(m.id)}
               className={`p-4 rounded-xl border text-left transition-all ${
                 isSelected
-                  ? 'border-stone-900 bg-white shadow-xs ring-1 ring-stone-900'
-                  : 'border-stone-200 bg-stone-50/60 hover:bg-white hover:border-stone-300'
+                  ? 'border-[#171717] bg-white shadow-xs ring-1 ring-[#171717]'
+                  : 'border-[#E5E2DC] bg-[#FAF9F6] hover:bg-white hover:border-[#D0CDC5]'
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-stone-900">{m.display_name}</span>
+                <span className="text-xs font-bold text-[#171717]">{m.display_name}</span>
                 {m.available ? (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#1E6B37]"></span>
                 ) : (
-                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#92400E]"></span>
                 )}
               </div>
-              <p className="text-[11px] font-mono text-stone-500">{m.parameters}</p>
-              <div className="mt-2 text-[11px] font-mono font-medium text-stone-800">
+              <p className="text-[11px] font-mono text-[#66645F]">{m.parameters}</p>
+              <div className="mt-2 text-[11px] font-mono font-medium text-[#171717]">
                 Acc: {m.test_accuracy}
               </div>
             </button>
@@ -63,96 +63,96 @@ export const ModelsPage: React.FC = () => {
 
       {/* Active Model Detailed Card */}
       {activeModel && (
-        <div className="bg-white rounded-xl border border-stone-200 p-6 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
+        <div className="bg-white rounded-xl border border-[#E5E2DC] p-6 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E2DC] pb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-stone-100 text-stone-700 font-semibold border border-stone-200">
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[#FAF9F6] text-[#66645F] font-semibold border border-[#E5E2DC]">
                   {activeModel.id}
                 </span>
-                <span className="text-xs text-emerald-700 flex items-center gap-1 font-mono">
+                <span className="text-xs text-[#1E6B37] flex items-center gap-1 font-mono">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Checkpoint Verified (Strict State Dict)
+                  Strict state_dict Assertion Verified
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-stone-900">{activeModel.display_name}</h2>
+              <h2 className="text-xl font-bold text-[#171717]">{activeModel.display_name}</h2>
             </div>
 
-            <div className="flex items-center gap-2 font-mono text-xs text-stone-600 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200">
-              <FileCheck className="w-4 h-4 text-stone-500" />
+            <div className="flex items-center gap-2 font-mono text-xs text-[#66645F] bg-[#FAF9F6] px-3 py-1.5 rounded-lg border border-[#E5E2DC]">
+              <FileCheck className="w-4 h-4 text-[#8F8C85]" />
               <span>{activeModel.checkpoint}</span>
             </div>
           </div>
 
-          <p className="text-xs text-stone-600 leading-relaxed">
+          <p className="text-xs text-[#66645F] leading-relaxed">
             {activeModel.description}
           </p>
 
           {/* Technical Specifications Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-3.5 rounded-lg bg-stone-50 border border-stone-200/80 space-y-1">
-              <span className="text-[10px] uppercase font-mono text-stone-500 block">Total Parameters</span>
-              <strong className="text-sm font-mono text-stone-900">{activeModel.parameters}</strong>
+            <div className="p-3.5 rounded-lg bg-[#FAF9F6] border border-[#E5E2DC] space-y-1">
+              <span className="text-[10px] uppercase font-mono text-[#8F8C85] block">Total Parameters</span>
+              <strong className="text-sm font-mono text-[#171717]">{activeModel.parameters}</strong>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-stone-50 border border-stone-200/80 space-y-1">
-              <span className="text-[10px] uppercase font-mono text-stone-500 block">Checkpoint Size</span>
-              <strong className="text-sm font-mono text-stone-900">{activeModel.model_size_mb} MB</strong>
+            <div className="p-3.5 rounded-lg bg-[#FAF9F6] border border-[#E5E2DC] space-y-1">
+              <span className="text-[10px] uppercase font-mono text-[#8F8C85] block">Checkpoint Size</span>
+              <strong className="text-sm font-mono text-[#171717]">{activeModel.model_size_mb} MB</strong>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-stone-50 border border-stone-200/80 space-y-1">
-              <span className="text-[10px] uppercase font-mono text-stone-500 block">Average CPU Latency</span>
-              <strong className="text-sm font-mono text-stone-900">{activeModel.avg_cpu_latency_ms} ms</strong>
+            <div className="p-3.5 rounded-lg bg-[#FAF9F6] border border-[#E5E2DC] space-y-1">
+              <span className="text-[10px] uppercase font-mono text-[#8F8C85] block">Average CPU Latency</span>
+              <strong className="text-sm font-mono text-[#171717]">{activeModel.avg_cpu_latency_ms} ms</strong>
             </div>
 
-            <div className="p-3.5 rounded-lg bg-stone-50 border border-stone-200/80 space-y-1">
-              <span className="text-[10px] uppercase font-mono text-stone-500 block">Macro F1 Score</span>
-              <strong className="text-sm font-mono text-stone-900">{activeModel.macro_f1}</strong>
+            <div className="p-3.5 rounded-lg bg-[#FAF9F6] border border-[#E5E2DC] space-y-1">
+              <span className="text-[10px] uppercase font-mono text-[#8F8C85] block">Macro F1 Score</span>
+              <strong className="text-sm font-mono text-[#171717]">{activeModel.macro_f1}</strong>
             </div>
           </div>
 
           {/* Deep Learning Pipeline & Explainability Spec */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
             {/* Preprocessing & Tensor Pipeline */}
-            <div className="space-y-3 p-4 rounded-lg border border-stone-200 bg-stone-50/50">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-stone-600" />
+            <div className="space-y-3 p-4 rounded-lg border border-[#E5E2DC] bg-[#FAF9F6]">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#171717] flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-[#66645F]" />
                 Standardized Preprocessing Pipeline
               </h3>
-              <ul className="text-xs text-stone-600 space-y-2 list-disc list-inside">
+              <ul className="text-xs text-[#66645F] space-y-2 list-disc list-inside">
                 <li>
-                  <strong>Input Normalization:</strong> Mean = [0.3337, 0.3064, 0.3171], Std = [0.2672, 0.2564, 0.2629]
+                  <strong className="text-[#171717]">Input Normalization:</strong> Mean = [0.3337, 0.3064, 0.3171], Std = [0.2672, 0.2564, 0.2629]
                 </li>
                 <li>
-                  <strong>Input Dimensions:</strong> Strict resize to exactly <strong>64×64 pixels</strong> (Bilinear interpolation)
+                  <strong className="text-[#171717]">Resolution:</strong> Strict resize to exactly <strong>64×64 pixels</strong> via bilinear interpolation
                 </li>
                 <li>
-                  <strong>Channels:</strong> Safe conversion to 3-channel RGB (handles single-channel grayscale or RGBA)
+                  <strong className="text-[#171717]">Channels:</strong> Safe conversion to 3-channel RGB (handles grayscale or alpha masks)
                 </li>
                 <li>
-                  <strong>Shape Assertion:</strong> Verified tensor dimension strictly enforced as <code className="bg-stone-200/80 px-1 py-0.5 rounded font-mono text-[11px]">[1, 3, 64, 64]</code>
+                  <strong className="text-[#171717]">Shape Assertion:</strong> Verified tensor dimension strictly enforced as <code className="bg-[#E5E2DC] px-1 py-0.5 rounded font-mono text-[11px] text-[#171717]">[1, 3, 64, 64]</code>
                 </li>
               </ul>
             </div>
 
             {/* Grad-CAM Target Layer & Hook Mechanism */}
-            <div className="space-y-3 p-4 rounded-lg border border-stone-200 bg-stone-50/50">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-[#e04a2f]" />
+            <div className="space-y-3 p-4 rounded-lg border border-[#E5E2DC] bg-[#FAF9F6]">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#171717] flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-[#C94A3A]" />
                 Grad-CAM Activation Hook Target
               </h3>
-              <ul className="text-xs text-stone-600 space-y-2 list-disc list-inside">
+              <ul className="text-xs text-[#66645F] space-y-2 list-disc list-inside">
                 <li>
-                  <strong>Target Layer:</strong> <code className="bg-rose-50 text-[#e04a2f] border border-rose-200 px-1.5 py-0.5 rounded font-mono text-[11px]">{activeModel.gradcam_target_layer}</code>
+                  <strong className="text-[#171717]">Target Layer:</strong> <code className="bg-[#FAF0EE] text-[#C94A3A] border border-[#F0C4BD] px-1.5 py-0.5 rounded font-mono text-[11px]">{activeModel.gradcam_target_layer}</code>
                 </li>
                 <li>
-                  <strong>Hook Management:</strong> Registered with <code className="font-mono text-[11px]">register_forward_hook</code> and <code className="font-mono text-[11px]">register_full_backward_hook</code>
+                  <strong className="text-[#171717]">Hook Registration:</strong> Managed with <code className="font-mono text-[11px] text-[#171717]">register_forward_hook</code> and <code className="font-mono text-[11px] text-[#171717]">register_full_backward_hook</code>
                 </li>
                 <li>
-                  <strong>Safe Lifecycle:</strong> Managed via context manager to explicitly call <code className="font-mono text-[11px]">handle.remove()</code> upon completion, preventing memory leaks
+                  <strong className="text-[#171717]">Safe Lifecycle:</strong> Managed via context manager to explicitly call <code className="font-mono text-[11px] text-[#171717]">handle.remove()</code>, preventing PyTorch memory leaks
                 </li>
                 <li>
-                  <strong>Colormap:</strong> OpenCV Jet color mapping with alpha blending (<code className="font-mono text-[11px]">α = 0.5</code>)
+                  <strong className="text-[#171717]">Colormap Blending:</strong> OpenCV Jet color mapping with alpha blending (<code className="font-mono text-[11px] text-[#171717]">&alpha; = 0.5</code>)
                 </li>
               </ul>
             </div>

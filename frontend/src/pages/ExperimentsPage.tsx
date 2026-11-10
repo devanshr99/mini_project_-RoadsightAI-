@@ -31,26 +31,26 @@ export const ExperimentsPage: React.FC = () => {
   });
 
   return (
-    <div className="space-y-8 py-4">
+    <div className="space-y-8 py-2">
       {/* Title */}
-      <div className="border-b border-stone-200 pb-5">
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+      <div className="border-b border-[#E5E2DC] pb-5">
+        <h1 className="text-2xl font-bold text-[#171717] tracking-tight">
           Empirical Experiment Ledger
         </h1>
-        <p className="text-xs text-stone-600 mt-1">
-          Historical records of training iterations, hyperparameter sweeps, transfer learning freeze/unfreeze phases, and evaluation results loaded directly from <code>experiments/experiment_log.csv</code>.
+        <p className="text-xs text-[#66645F] mt-1">
+          Historical records of training runs, hyperparameter sweeps, transfer learning freeze/unfreeze phases, and evaluation results loaded directly from <code className="bg-[#FAF9F6] border border-[#E5E2DC] px-1 py-0.5 rounded font-mono text-[11px] text-[#171717]">experiments/experiment_log.csv</code>.
         </p>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-xl border border-[#E5E2DC] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-4 h-4 text-stone-500" />
-          <span className="text-xs font-medium text-stone-600">Filter Architecture:</span>
+          <Filter className="w-4 h-4 text-[#8F8C85]" />
+          <span className="text-xs font-medium text-[#66645F]">Filter Architecture:</span>
           <select
             value={selectedFilter}
             onChange={(e) => setSelectedFilter(e.target.value)}
-            className="text-xs bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-800 font-medium"
+            className="text-xs bg-[#FAF9F6] border border-[#E5E2DC] rounded px-2.5 py-1 text-[#171717] font-medium focus:outline-none focus:border-[#C94A3A]"
           >
             <option value="all">All Architectures ({experiments.length})</option>
             <option value="custom_cnn">Custom CNN</option>
@@ -60,23 +60,24 @@ export const ExperimentsPage: React.FC = () => {
         </div>
 
         <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#8F8C85] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search experiments or notes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900 bg-stone-50"
-          />
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-[#E5E2DC] focus:outline-none focus:border-[#C94A3A] bg-[#FAF9F6] text-[#171717]"
+          >
+          </input>
         </div>
       </div>
 
       {/* Experiments Table */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-xl border border-[#E5E2DC] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-stone-50/80 border-b border-stone-200 text-stone-600 font-semibold uppercase tracking-wider">
+              <tr className="bg-[#FAF9F6] border-b border-[#E5E2DC] text-[#66645F] font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Run ID</th>
                 <th className="py-3 px-4">Model</th>
                 <th className="py-3 px-4">Augmentation</th>
@@ -88,34 +89,34 @@ export const ExperimentsPage: React.FC = () => {
                 <th className="py-3 px-4">Experiment Notes</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-100 text-stone-800 font-mono">
+            <tbody className="divide-y divide-[#E5E2DC] text-[#171717] font-mono">
               {filtered.map((exp, idx) => (
-                <tr key={`${exp.exp_id}-${idx}`} className="hover:bg-stone-50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-stone-900 font-sans">
+                <tr key={`${exp.exp_id}-${idx}`} className="hover:bg-[#FAF9F6] transition-colors">
+                  <td className="py-3 px-4 font-bold text-[#171717] font-sans">
                     {exp.exp_id}
                   </td>
-                  <td className="py-3 px-4 font-medium text-stone-700">
+                  <td className="py-3 px-4 font-medium text-[#66645F]">
                     {exp.model_name}
                   </td>
-                  <td className="py-3 px-4 text-[11px] text-stone-500 font-sans max-w-[140px] truncate" title={exp.augmentation}>
+                  <td className="py-3 px-4 text-[11px] text-[#66645F] font-sans max-w-[140px] truncate" title={exp.augmentation}>
                     {exp.augmentation}
                   </td>
-                  <td className="py-3 px-4 text-right text-stone-600">
+                  <td className="py-3 px-4 text-right text-[#66645F]">
                     {exp.lr} / {exp.batch_size} / {exp.epochs}
                   </td>
-                  <td className="py-3 px-4 text-right text-stone-600">
+                  <td className="py-3 px-4 text-right text-[#66645F]">
                     {exp.val_acc}%
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-stone-900">
+                  <td className="py-3 px-4 text-right font-bold text-[#171717]">
                     {exp.test_acc}%
                   </td>
                   <td className="py-3 px-4 text-right">
                     {exp.macro_f1}
                   </td>
-                  <td className="py-3 px-4 text-right text-stone-600">
+                  <td className="py-3 px-4 text-right text-[#66645F]">
                     {exp.inference_time_ms} ms
                   </td>
-                  <td className="py-3 px-4 font-sans text-stone-600 text-[11px] max-w-[260px]">
+                  <td className="py-3 px-4 font-sans text-[#66645F] text-[11px] max-w-[260px]">
                     {exp.notes}
                   </td>
                 </tr>

@@ -12,10 +12,10 @@ import { AboutPage } from './pages/AboutPage';
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#fafaf8] text-[#1c2128] flex flex-col font-sans selection:bg-[#e04a2f] selection:text-white">
+      <div className="min-h-screen bg-[#F7F6F3] text-[#171717] flex flex-col font-sans selection:bg-[#FAF0EE] selection:text-[#C94A3A]">
         <Navbar />
 
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/recognize" element={<RecognizePage />} />
@@ -28,17 +28,19 @@ export const App: React.FC = () => {
           </Routes>
         </main>
 
-        <footer className="border-t border-stone-200 bg-white py-6 mt-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500 font-mono">
-            <div>
-              <strong className="text-stone-800 font-sans">RoadSight AI</strong> &bull; B.Tech Computer Science Final Project
+        <footer className="border-t border-[#E5E2DC] bg-white py-6 mt-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#66645F]">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-[#171717]">RoadSight AI</span>
+              <span className="text-[#8F8C85]">&bull;</span>
+              <span>B.Tech Computer Science Engineering Mini-Project</span>
             </div>
-            <div className="flex items-center space-x-3">
-              <span>Local-First Execution</span>
-              <span>&bull;</span>
+            <div className="flex items-center space-x-3 font-mono text-[11px] text-[#66645F]">
               <span>GTSRB 43-Class Benchmark</span>
-              <span>&bull;</span>
-              <span>Grad-CAM Explainability</span>
+              <span className="text-[#8F8C85]">&bull;</span>
+              <span>Grad-CAM Saliency</span>
+              <span className="text-[#8F8C85]">&bull;</span>
+              <span className="text-[#1E6B37]">100% Local Inference</span>
             </div>
           </div>
         </footer>

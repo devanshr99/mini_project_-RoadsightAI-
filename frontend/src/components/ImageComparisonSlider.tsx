@@ -45,32 +45,32 @@ export const ImageComparisonSlider: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* View mode toggle controls */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-stone-600 flex items-center gap-1.5">
-          <Sliders className="w-3.5 h-3.5 text-stone-500" />
-          Explainability Visualizer
+        <span className="text-xs font-semibold text-[#171717] flex items-center gap-1.5 uppercase tracking-wider">
+          <Sliders className="w-3.5 h-3.5 text-[#C94A3A]" />
+          Visual Saliency Inspection
         </span>
-        <div className="inline-flex rounded-lg border border-stone-200 bg-stone-100 p-0.5 text-xs font-medium">
+        <div className="inline-flex rounded-lg border border-[#E5E2DC] bg-[#FAF9F6] p-0.5 text-xs font-medium">
           <button
             type="button"
             onClick={() => setViewMode('slider')}
             className={`px-2.5 py-1 rounded-md transition-all ${
               viewMode === 'slider'
-                ? 'bg-white text-stone-900 shadow-xs font-semibold'
-                : 'text-stone-600 hover:text-stone-900'
+                ? 'bg-white text-[#171717] border border-[#E5E2DC] shadow-[0_1px_2px_rgba(0,0,0,0.04)] font-semibold'
+                : 'text-[#66645F] hover:text-[#171717]'
             }`}
           >
-            Split Slider
+            Split Comparison
           </button>
           <button
             type="button"
             onClick={() => setViewMode('side-by-side')}
             className={`px-2.5 py-1 rounded-md transition-all ${
               viewMode === 'side-by-side'
-                ? 'bg-white text-stone-900 shadow-xs font-semibold'
-                : 'text-stone-600 hover:text-stone-900'
+                ? 'bg-white text-[#171717] border border-[#E5E2DC] shadow-[0_1px_2px_rgba(0,0,0,0.04)] font-semibold'
+                : 'text-[#66645F] hover:text-[#171717]'
             }`}
           >
             Side-by-Side
@@ -81,8 +81,8 @@ export const ImageComparisonSlider: React.FC<Props> = ({
               onClick={() => setViewMode('heatmap')}
               className={`px-2.5 py-1 rounded-md transition-all ${
                 viewMode === 'heatmap'
-                  ? 'bg-white text-stone-900 shadow-xs font-semibold'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'bg-white text-[#171717] border border-[#E5E2DC] shadow-[0_1px_2px_rgba(0,0,0,0.04)] font-semibold'
+                : 'text-[#66645F] hover:text-[#171717]'
               }`}
             >
               Jet Heatmap
@@ -99,7 +99,7 @@ export const ImageComparisonSlider: React.FC<Props> = ({
           onMouseLeave={handleMouseUp}
           onMouseMove={handleMouseMove}
           onTouchMove={handleTouchMove}
-          className="relative w-full aspect-square max-w-[340px] mx-auto overflow-hidden rounded-xl border border-stone-300 shadow-sm select-none cursor-ew-resize bg-stone-950"
+          className="relative w-full aspect-square max-w-[340px] mx-auto overflow-hidden rounded-xl border border-[#E5E2DC] shadow-xs select-none cursor-ew-resize bg-[#171717]"
         >
           {/* Background: Grad-CAM Overlay */}
           <img
@@ -126,21 +126,21 @@ export const ImageComparisonSlider: React.FC<Props> = ({
             className="absolute top-0 bottom-0 w-0.5 bg-white shadow-md pointer-events-none"
             style={{ left: `${sliderPos}%` }}
           >
-            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-stone-900 text-white border-2 border-white flex items-center justify-center text-[10px] shadow-sm">
-              ↔
+            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-[#171717] text-white border-2 border-white flex items-center justify-center text-[10px] shadow-sm font-bold">
+              &harr;
             </div>
           </div>
 
           {/* Labels */}
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono pointer-events-none">
-            Original
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur-xs text-[10px] text-white font-mono pointer-events-none">
+            Original Input
           </div>
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] text-white font-mono pointer-events-none">
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur-xs text-[10px] text-white font-mono pointer-events-none">
             Grad-CAM Heatmap
           </div>
           <div className="absolute bottom-2 inset-x-0 text-center pointer-events-none">
-            <span className="px-2 py-0.5 rounded bg-black/50 text-[10px] text-stone-300">
-              Drag slider left / right to inspect attention
+            <span className="px-2 py-0.5 rounded bg-black/60 text-[10px] text-stone-300 font-mono">
+              Drag left/right to inspect pictogram attention
             </span>
           </div>
         </div>
@@ -149,38 +149,40 @@ export const ImageComparisonSlider: React.FC<Props> = ({
       {viewMode === 'side-by-side' && (
         <div className="grid grid-cols-2 gap-3 max-w-[420px] mx-auto">
           <div className="space-y-1.5 text-center">
-            <div className="w-full aspect-square rounded-xl border border-stone-200 overflow-hidden bg-stone-950 flex items-center justify-center shadow-xs">
+            <div className="w-full aspect-square rounded-xl border border-[#E5E2DC] overflow-hidden bg-[#171717] flex items-center justify-center shadow-xs">
               <img
                 src={originalImage}
                 alt="Original Sign"
                 className="w-full h-full object-contain"
               />
             </div>
-            <span className="text-[11px] font-medium text-stone-600">Original Sign</span>
+            <span className="text-[11px] font-medium text-[#66645F]">Original Sign</span>
           </div>
           <div className="space-y-1.5 text-center">
-            <div className="w-full aspect-square rounded-xl border border-stone-200 overflow-hidden bg-stone-950 flex items-center justify-center shadow-xs">
+            <div className="w-full aspect-square rounded-xl border border-[#E5E2DC] overflow-hidden bg-[#171717] flex items-center justify-center shadow-xs">
               <img
                 src={overlayImage}
                 alt="Grad-CAM Overlay"
                 className="w-full h-full object-contain"
               />
             </div>
-            <span className="text-[11px] font-medium text-stone-600">Grad-CAM Overlay</span>
+            <span className="text-[11px] font-medium text-[#66645F]">Grad-CAM Overlay</span>
           </div>
         </div>
       )}
 
       {viewMode === 'heatmap' && heatmapImage && (
         <div className="max-w-[280px] mx-auto space-y-1.5 text-center">
-          <div className="w-full aspect-square rounded-xl border border-stone-200 overflow-hidden bg-stone-950 flex items-center justify-center shadow-xs">
+          <div className="w-full aspect-square rounded-xl border border-[#E5E2DC] overflow-hidden bg-[#171717] flex items-center justify-center shadow-xs">
             <img
               src={heatmapImage}
               alt="Jet Colormap Heatmap"
               className="w-full h-full object-contain"
             />
           </div>
-          <span className="text-[11px] font-medium text-stone-600">Raw Jet Activation Map (Red = High Attention)</span>
+          <span className="text-[11px] font-medium text-[#66645F] font-mono">
+            Raw Jet Activation Saliency Map (&alpha; = 0.5)
+          </span>
         </div>
       )}
     </div>
