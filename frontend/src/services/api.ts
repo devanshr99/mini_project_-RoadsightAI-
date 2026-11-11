@@ -1,3 +1,4 @@
+
 import {
   HealthStatus,
   ModelInfo,
@@ -8,10 +9,14 @@ import {
   ExperimentRecord,
 } from '../types';
 
-const API_BASE = '/api';
+// Backend URL from Vercel environment variables
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || '/api'
+).replace(/\/+$/, '');
 
 export class ApiError extends Error {
   status: number;
+
   constructor(message: string, status: number) {
     super(message);
     this.status = status;
@@ -80,7 +85,10 @@ export const api = {
     dimensions: string;
     filename: string;
   }> {
-    const url = classId !== undefined ? `${API_BASE}/dataset/sample?class_id=${classId}` : `${API_BASE}/dataset/sample`;
+    const url = classId !== undefined
+      ? `${API_BASE}/dataset/sample?class_id=${classId}`
+      : `${API_BASE}/dataset/sample`;
+
     const res = await fetch(url);
     return handleResponse(res);
   },
