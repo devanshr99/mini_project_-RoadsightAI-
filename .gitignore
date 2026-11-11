@@ -11,8 +11,6 @@ __pycache__/
 .pytest_cache/
 
 # Large Model Checkpoints (GitHub rejects files > 100MB; resnet18_best.pth is 128MB)
-checkpoints/
-*.pth
 *.pt
 *.onnx
 *.bin
