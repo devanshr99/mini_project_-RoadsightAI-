@@ -24,7 +24,6 @@ export const Navbar: React.FC = () => {
 
   const checkHealth = () => {
     setServerState('loading');
-    setHealth(null);
     api.getHealth()
       .then(data => {
         setHealth(data);
@@ -37,11 +36,33 @@ export const Navbar: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initial check — Render free tier may be cold-starting; timeout is 12 s.
-    checkHealth();
-    // Re-check every 60 s so the pill updates once Render wakes up.
-    const interval = setInterval(checkHealth, 60_000);
-    return () => clearInterval(interval);
+    let timer: ReturnType<typeof setTimeout>;
+    let isMounted = true;
+
+    const runCheck = () => {
+      setServerState(prev => (prev === 'ok' ? 'ok' : 'loading'));
+      api.getHealth()
+        .then(data => {
+          if (!isMounted) return;
+          setHealth(data);
+          setServerState('ok');
+          // Poll every 45s while healthy
+          timer = setTimeout(runCheck, 45_000);
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          setHealth(null);
+          setServerState('error');
+          // When offline/cold-starting, retry every 8s to catch wake-up immediately
+          timer = setTimeout(runCheck, 8_000);
+        });
+    };
+
+    runCheck();
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   const navLinks = [

@@ -25,16 +25,18 @@ export class ApiError extends Error {
   }
 }
 
-// All fetch calls use a 12-second timeout so the navbar never hangs indefinitely.
-// Render free-tier cold starts can take ~15–30 s; callers handle the timeout error.
-const TIMEOUT_MS = 12_000;
+// Default timeout: 30s to accommodate server spin-up/cold starts.
+// For inference/prediction: 90s to accommodate initial model lazy loading into CPU memory.
+const DEFAULT_TIMEOUT_MS = 30_000;
+const INFERENCE_TIMEOUT_MS = 90_000;
 
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(id);
@@ -78,20 +80,27 @@ export const api = {
   },
 
   async predict(formData: FormData): Promise<PredictionResult> {
-    // Predictions can be slow on first call (model lazy-load); give 60 s.
-    const res = await fetchWithTimeout(`${API_BASE}/predict`, {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetchWithTimeout(
+      `${API_BASE}/predict`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+      INFERENCE_TIMEOUT_MS
+    );
     return handleResponse<PredictionResult>(res);
   },
 
   async predictBase64(image_base64: string, model: string): Promise<PredictionResult> {
-    const res = await fetchWithTimeout(`${API_BASE}/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_base64, model }),
-    });
+    const res = await fetchWithTimeout(
+      `${API_BASE}/predict`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64, model }),
+      },
+      INFERENCE_TIMEOUT_MS
+    );
     return handleResponse<PredictionResult>(res);
   },
 
