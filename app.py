@@ -54,14 +54,31 @@ predictor_cache = PredictorCache()
 
 
 # --- CORS Middleware ---
+
+ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    # Vercel deployments — add your exact Vercel URL here if you want to restrict
+    # e.g. "https://mini-project-roadsightai.vercel.app",
+}
+
+@app.before_request
+def handle_options_preflight():
+    """Return CORS headers for all OPTIONS preflight requests immediately."""
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        origin = request.headers.get("Origin", "*")
+        response.headers["Access-Control-Allow-Origin"] = origin if origin in ALLOWED_ORIGINS else "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response
+
 @app.after_request
 def add_cors_headers(response):
-    origin = request.headers.get("Origin")
-    # Allow local development frontend origins
-    if origin in ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("Origin", "*")
+    response.headers["Access-Control-Allow-Origin"] = origin if origin in ALLOWED_ORIGINS else "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     return response

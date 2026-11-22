@@ -15,16 +15,33 @@ import {
 import { api } from '../services/api';
 import { HealthStatus } from '../types';
 
+type ServerState = 'loading' | 'ok' | 'error';
+
 export const Navbar: React.FC = () => {
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [serverState, setServerState] = useState<ServerState>('loading');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  const checkHealth = () => {
+    setServerState('loading');
+    setHealth(null);
     api.getHealth()
-      .then(data => { if (isMounted) setHealth(data); })
-      .catch(() => { if (isMounted) setHealth(null); });
-    return () => { isMounted = false; };
+      .then(data => {
+        setHealth(data);
+        setServerState('ok');
+      })
+      .catch(() => {
+        setHealth(null);
+        setServerState('error');
+      });
+  };
+
+  useEffect(() => {
+    // Initial check — Render free tier may be cold-starting; timeout is 12 s.
+    checkHealth();
+    // Re-check every 60 s so the pill updates once Render wakes up.
+    const interval = setInterval(checkHealth, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const navLinks = [
@@ -86,15 +103,27 @@ export const Navbar: React.FC = () => {
 
           {/* Device & Status Indicator */}
           <div className="hidden sm:flex items-center space-x-2">
-            {health ? (
+            {serverState === 'ok' && health ? (
               <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#EBF5EE] border border-[#C3E6CD] text-[#1E6B37] text-[11px] font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#1E6B37]"></span>
                 <span className="font-medium">Backend Ready ({health.device.toUpperCase()})</span>
               </div>
-            ) : (
+            ) : serverState === 'loading' ? (
               <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-[11px] font-mono">
-                <AlertCircle className="w-3 h-3 text-[#92400E]" />
-                <span>Checking Server...</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#D97706] animate-pulse"></span>
+                <span>Connecting…</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#FEE2E2] border border-[#FECACA] text-[#991B1B] text-[11px] font-mono">
+                <AlertCircle className="w-3 h-3" />
+                <span>Backend Offline</span>
+                <button
+                  onClick={checkHealth}
+                  className="ml-1 underline underline-offset-2 hover:no-underline"
+                  title="Retry connection"
+                >
+                  Retry
+                </button>
               </div>
             )}
           </div>
@@ -136,9 +165,20 @@ export const Navbar: React.FC = () => {
             );
           })}
           <div className="pt-2">
-            {health && (
+            {serverState === 'ok' && health && (
               <div className="px-3 py-1.5 rounded bg-[#EBF5EE] text-[#1E6B37] border border-[#C3E6CD] text-[11px] font-mono">
-                ● Device: {health.device.toUpperCase()} &bull; PyTorch {health.torch_version}
+                ● Device: {health.device.toUpperCase()} · PyTorch {health.torch_version}
+              </div>
+            )}
+            {serverState === 'loading' && (
+              <div className="px-3 py-1.5 rounded bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] text-[11px] font-mono">
+                ● Connecting to backend…
+              </div>
+            )}
+            {serverState === 'error' && (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA] text-[11px] font-mono">
+                <span>● Backend Offline</span>
+                <button onClick={checkHealth} className="underline underline-offset-2">Retry</button>
               </div>
             )}
           </div>

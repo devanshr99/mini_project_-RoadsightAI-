@@ -9,9 +9,10 @@ import {
   ExperimentRecord,
 } from '../types';
 
-// Backend URL from Vercel environment variables
+// Render backend URL — falls back to relative /api for local dev (Vite proxy)
 const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL || '/api'
+  import.meta.env.VITE_API_BASE_URL ||
+  'https://mini-project-roadsightai.onrender.com/api'
 ).replace(/\/+$/, '');
 
 export class ApiError extends Error {
@@ -21,6 +22,26 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
     this.name = 'ApiError';
+  }
+}
+
+// All fetch calls use a 12-second timeout so the navbar never hangs indefinitely.
+// Render free-tier cold starts can take ~15–30 s; callers handle the timeout error.
+const TIMEOUT_MS = 12_000;
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return res;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
   }
 }
 
@@ -40,24 +61,25 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export const api = {
   async getHealth(): Promise<HealthStatus> {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await fetchWithTimeout(`${API_BASE}/health`);
     return handleResponse<HealthStatus>(res);
   },
 
   async getModels(): Promise<ModelInfo[]> {
-    const res = await fetch(`${API_BASE}/models`);
+    const res = await fetchWithTimeout(`${API_BASE}/models`);
     const data = await handleResponse<{ models: ModelInfo[] }>(res);
     return data.models;
   },
 
   async getClasses(): Promise<Record<string, string>> {
-    const res = await fetch(`${API_BASE}/classes`);
+    const res = await fetchWithTimeout(`${API_BASE}/classes`);
     const data = await handleResponse<{ classes: Record<string, string> }>(res);
     return data.classes;
   },
 
   async predict(formData: FormData): Promise<PredictionResult> {
-    const res = await fetch(`${API_BASE}/predict`, {
+    // Predictions can be slow on first call (model lazy-load); give 60 s.
+    const res = await fetchWithTimeout(`${API_BASE}/predict`, {
       method: 'POST',
       body: formData,
     });
@@ -65,7 +87,7 @@ export const api = {
   },
 
   async predictBase64(image_base64: string, model: string): Promise<PredictionResult> {
-    const res = await fetch(`${API_BASE}/predict`, {
+    const res = await fetchWithTimeout(`${API_BASE}/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64, model }),
@@ -74,7 +96,7 @@ export const api = {
   },
 
   async getDatasetSummary(): Promise<DatasetSummary> {
-    const res = await fetch(`${API_BASE}/dataset/summary`);
+    const res = await fetchWithTimeout(`${API_BASE}/dataset/summary`);
     return handleResponse<DatasetSummary>(res);
   },
 
@@ -89,23 +111,23 @@ export const api = {
       ? `${API_BASE}/dataset/sample?class_id=${classId}`
       : `${API_BASE}/dataset/sample`;
 
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     return handleResponse(res);
   },
 
   async getSamplesGallery(): Promise<SampleGalleryItem[]> {
-    const res = await fetch(`${API_BASE}/dataset/samples-gallery`);
+    const res = await fetchWithTimeout(`${API_BASE}/dataset/samples-gallery`);
     const data = await handleResponse<{ gallery: SampleGalleryItem[] }>(res);
     return data.gallery;
   },
 
   async getEvaluation(): Promise<EvaluationData> {
-    const res = await fetch(`${API_BASE}/evaluation`);
+    const res = await fetchWithTimeout(`${API_BASE}/evaluation`);
     return handleResponse<EvaluationData>(res);
   },
 
   async getExperiments(): Promise<ExperimentRecord[]> {
-    const res = await fetch(`${API_BASE}/experiments`);
+    const res = await fetchWithTimeout(`${API_BASE}/experiments`);
     const data = await handleResponse<{ experiments: ExperimentRecord[] }>(res);
     return data.experiments;
   },
