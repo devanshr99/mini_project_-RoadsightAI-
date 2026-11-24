@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -70,17 +71,28 @@ class GradCAM:
             )
 
         self.model.eval()
-        output = self.model(input_tensor)
 
-        if target_class is None:
-            target_class = torch.argmax(output, dim=1).item()
+        # Run forward pass with gradients enabled so the backward hook fires correctly.
+        # Suppress the PyTorch UserWarning about full_backward_hook firing on outputs
+        # with no requires_grad inputs — the hook still functions correctly here because
+        # we explicitly set requires_grad=True on the target layer's parameters above.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Full backward hook is firing",
+                category=UserWarning,
+            )
+            output = self.model(input_tensor)
 
-        # Zero gradients
-        self.model.zero_grad()
+            if target_class is None:
+                target_class = torch.argmax(output, dim=1).item()
 
-        # Target class score
-        score = output[0, target_class]
-        score.backward()
+            # Zero gradients
+            self.model.zero_grad()
+
+            # Backprop through the target class score
+            score = output[0, target_class]
+            score.backward()
 
         if self.gradients is None or self.activations is None:
             raise RuntimeError("Grad-CAM failed to capture gradients or activations from target layer.")
@@ -89,7 +101,7 @@ class GradCAM:
         pooled_gradients = torch.mean(self.gradients, dim=[0, 2, 3])
 
         # Weight activations by pooled gradients
-        activations = self.activations[0] # shape (C, H, W)
+        activations = self.activations[0]  # shape (C, H, W)
         for i in range(activations.size(0)):
             activations[i] *= pooled_gradients[i]
 

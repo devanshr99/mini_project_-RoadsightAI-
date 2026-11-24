@@ -386,6 +386,26 @@ export const RecognizePage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Low-confidence warning banner */}
+              {prediction.low_confidence && (
+                <div className="p-3 rounded-lg bg-[#FEF3C7] border border-[#FDE68A] text-[#92400E] text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-[#D97706]" />
+                  <div className="space-y-0.5">
+                    <p className="font-semibold">Low Confidence Warning</p>
+                    <p className="leading-relaxed">{prediction.confidence_note}</p>
+                    {prediction.model_recommendation && prediction.model_name !== prediction.model_recommendation && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModel(prediction.model_recommendation!)}
+                        className="mt-1 underline underline-offset-2 hover:no-underline font-medium"
+                      >
+                        Switch to ResNet18 (99.67% accuracy) →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Top 3 Predictions Bar Chart */}
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#171717]">

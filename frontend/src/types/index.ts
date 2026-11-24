@@ -34,6 +34,10 @@ export interface PredictionResult {
   inference_latency_ms: number;
   input_dimensions: string;
   is_valid: boolean;
+  // Low-confidence guidance fields (added by backend when confidence < 70%)
+  low_confidence?: boolean;
+  confidence_note?: string;
+  model_recommendation?: string;
 }
 
 export interface HealthStatus {

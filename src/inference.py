@@ -56,6 +56,13 @@ class TrafficSignPredictor:
 
         model.load_state_dict(checkpoint["model_state_dict"], strict=True)
         print(f"[Inference Engine] Successfully loaded '{self.model_name}' weights from '{self.checkpoint_path}' (strict=True)")
+
+        # Immediately free checkpoint dictionary and trigger garbage collection to conserve RAM on cloud hosts
+        del checkpoint
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         model.eval()
         return model

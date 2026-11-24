@@ -70,8 +70,9 @@ def preprocess_image(image, input_size=(64, 64), device=None):
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    # Resize to exact dimensions (64, 64)
-    image_resized = image.resize(input_size, Image.BILINEAR)
+    # Resize to exact dimensions using LANCZOS for high-quality downscaling
+    # (preserves fine digit details in speed limit signs, e.g. 20 vs 30 vs 60)
+    image_resized = image.resize(input_size, Image.LANCZOS)
 
     # Transform and normalize
     transform_pipeline = transforms.Compose([

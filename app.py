@@ -29,14 +29,23 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp"}
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB limit
 
 
-# In-memory predictor cache to avoid repeated disk reads
+# In-memory predictor cache with single-model residency to prevent OOM on 512MB hosts (Render)
 class PredictorCache:
-    def __init__(self):
+    def __init__(self, max_cache_size: int = 1):
         self._cache = {}
+        self.max_cache_size = max_cache_size
 
     def get_predictor(self, model_name: str) -> TrafficSignPredictor:
         canonical_key = resolve_model_key(model_name)
         if canonical_key not in self._cache:
+            # Evict prior model and force garbage collection before loading the new one
+            if self._cache:
+                self._cache.clear()
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
             checkpoint_path = get_checkpoint_for_model(canonical_key)
             if not os.path.exists(checkpoint_path):
                 raise FileNotFoundError(
@@ -290,6 +299,19 @@ def predict():
     result["inference_latency_ms"] = elapsed_ms
     result["input_dimensions"] = f"{width}x{height}"
     result["is_valid"] = True
+
+    # Add low-confidence warning so the frontend can display user guidance.
+    # Threshold: < 70% confidence is considered ambiguous for GTSRB classes.
+    confidence = result.get("confidence", 0)
+    result["low_confidence"] = confidence < 70.0
+    if result["low_confidence"]:
+        result["confidence_note"] = (
+            f"Confidence is {confidence:.1f}% — the sign may be ambiguous, "
+            f"partially visible, or out-of-distribution. "
+            f"Try ResNet18 for higher accuracy on difficult images."
+        )
+    # Recommend the most accurate available model for user guidance
+    result["model_recommendation"] = "resnet18"
 
     return jsonify(result)
 
