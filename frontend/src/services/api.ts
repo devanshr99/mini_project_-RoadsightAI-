@@ -9,10 +9,13 @@ import {
   ExperimentRecord,
 } from '../types';
 
-// Render backend URL — falls back to relative /api for local dev (Vite proxy)
+// Local development uses Vite proxy ('/api' -> http://127.0.0.1:5000).
+// Production builds use VITE_API_BASE_URL or the deployed Render backend.
 const API_BASE = (
   import.meta.env.VITE_API_BASE_URL ||
-  'https://mini-project-roadsightai.onrender.com/api'
+  (import.meta.env.DEV
+    ? '/api'
+    : 'https://mini-project-roadsightai.onrender.com/api')
 ).replace(/\/+$/, '');
 
 export class ApiError extends Error {

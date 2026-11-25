@@ -90,6 +90,10 @@ class TrafficSignPredictor:
         gc.collect()
 
         model.eval()
+        # Freeze all parameters so Grad-CAM only builds a backward graph from
+        # the target convolutional layer onward instead of all 11M+ parameters.
+        for param in model.parameters():
+            param.requires_grad_(False)
         return model
 
     # ------------------------------------------------------------------

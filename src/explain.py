@@ -69,6 +69,9 @@ class GradCAM:
         self._handles.clear()
         self._activations = None
         self._gradients = None
+        if self.target_layer is not None:
+            for p in self.target_layer.parameters():
+                p.requires_grad_(False)
 
     def __enter__(self):
         return self
@@ -99,24 +102,24 @@ class GradCAM:
         self.model.eval()
         self.model.zero_grad()
 
-        # Forward pass — suppress benign warning about full_backward_hook
+        # Forward + backward — suppress benign warning about full_backward_hook
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore", message="Full backward hook is firing", category=UserWarning
             )
             output = self.model(input_tensor)   # shape [1, num_classes]
 
-        # Choose target class
-        if target_class is None:
-            target_class = int(output.argmax(dim=1).item())
+            # Choose target class
+            if target_class is None:
+                target_class = int(output.argmax(dim=1).item())
 
-        # Probabilities — detached, no_grad, computed separately from backward graph
-        with torch.no_grad():
-            probs = F.softmax(output.detach(), dim=1)[0].cpu().numpy().copy()
+            # Probabilities — detached, no_grad, computed separately from backward graph
+            with torch.inference_mode():
+                probs = F.softmax(output.detach(), dim=1)[0].cpu().numpy().copy()
 
-        # Backprop through target class score only
-        score = output[0, target_class]
-        score.backward()
+            # Backprop through target class score only
+            score = output[0, target_class]
+            score.backward()
 
         # --- Heatmap from hooks ---
         if self._gradients is None or self._activations is None:

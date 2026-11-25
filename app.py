@@ -19,6 +19,7 @@ import json
 import csv
 import base64
 import threading
+import traceback
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -30,6 +31,7 @@ import torch
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
 
 from src.models.factory import (
     ARCHITECTURE_CHECKPOINT_MAP,
@@ -176,6 +178,13 @@ def add_cors_headers(resp):
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     return resp
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(err):
+    """Ensure any unhandled backend exception logs a full traceback and returns JSON."""
+    traceback.print_exc()
+    return jsonify({"error": f"Server error: {str(err)}"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +419,10 @@ def predict():
             return jsonify({"error": str(e), "model_status": "checkpoint_missing"}), 404
         except MemoryError:
             gc.collect()
+            traceback.print_exc()
             return jsonify({"error": "Server out of memory — try again or use a lighter model (custom_cnn)"}), 503
         except Exception as e:
+            traceback.print_exc()
             return jsonify({"error": f"Inference failed: {e}"}), 500
 
     finally:
