@@ -1,9 +1,9 @@
+import gc
 import os
 import sys
 import warnings
 from pathlib import Path
 
-# Ensure project root is in sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import torch
@@ -12,15 +12,21 @@ import numpy as np
 from PIL import Image
 import cv2
 
-from src.dataset import preprocess_image, get_transforms, NORM_MEAN, NORM_STD
+from src.dataset import preprocess_image, NORM_MEAN, NORM_STD
 
 
 class GradCAM:
     """
-    Grad-CAM (Gradient-Weighted Class Activation Mapping) Generator.
-    Produces visual heatmaps explaining CNN model predictions.
-    Safely registers and removes PyTorch hooks to prevent accumulation.
+    Grad-CAM (Gradient-Weighted Class Activation Mapping) generator.
+
+    Memory contract:
+    - Activations and gradients captured by hooks are stored temporarily.
+    - generate_heatmap() explicitly deletes them after computing the heatmap.
+    - Hooks are removed when the context manager exits or the object is deleted.
+    - The backward pass uses a minimal local gradient context so the full
+      computation graph is not retained beyond the backward() call.
     """
+
     def __init__(self, model, target_layer):
         self.model = model
         self.target_layer = target_layer
@@ -28,28 +34,35 @@ class GradCAM:
         self.activations = None
         self.handles = []
 
-        # Ensure target layer parameters require gradients so backward hook reliably captures gradients
+        # Ensure target layer parameters require gradients so backward hook fires
         for param in self.target_layer.parameters():
-            param.requires_grad = True
+            param.requires_grad_(True)
 
-        # Register forward and backward hooks and record handles
         self.handles.append(self.target_layer.register_forward_hook(self._save_activations))
         self.handles.append(self.target_layer.register_full_backward_hook(self._save_gradients))
 
+    # --- Hooks -----------------------------------------------------------
+
     def _save_activations(self, module, input, output):
-        self.activations = output.detach()
+        # Detach immediately — we only need the values, not the graph
+        self.activations = output.detach().clone()
 
     def _save_gradients(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0].detach()
+        self.gradients = grad_output[0].detach().clone()
+
+    # --- Lifecycle -------------------------------------------------------
 
     def remove_hooks(self):
-        """Removes registered PyTorch hooks to avoid leaks and conflicts."""
+        """Remove all registered PyTorch hooks and clear cached tensors."""
         for handle in self.handles:
             try:
                 handle.remove()
             except Exception:
                 pass
         self.handles = []
+        # Explicitly release hook-captured tensors
+        self.activations = None
+        self.gradients = None
 
     def __enter__(self):
         return self
@@ -60,22 +73,27 @@ class GradCAM:
     def __del__(self):
         self.remove_hooks()
 
+    # --- Core Grad-CAM ---------------------------------------------------
+
     def generate_heatmap(self, input_tensor, target_class=None):
         """
-        Computes Grad-CAM activation heatmap for a given input tensor and target class.
-        Strictly validates input tensor shape before executing forward pass.
+        Compute a Grad-CAM heatmap for the given input tensor.
+
+        Returns:
+            heatmap   : np.ndarray [H, W] in [0, 1]
+            target_class : int
+            probs     : np.ndarray [num_classes] softmax probabilities
         """
         if input_tensor.dim() != 4 or tuple(input_tensor.shape[1:]) != (3, 64, 64):
             raise ValueError(
-                f"Grad-CAM input_tensor shape must be [B, 3, 64, 64], but got {list(input_tensor.shape)}"
+                f"Grad-CAM input_tensor must be [B, 3, 64, 64], got {list(input_tensor.shape)}"
             )
 
         self.model.eval()
 
-        # Run forward pass with gradients enabled so the backward hook fires correctly.
-        # Suppress the PyTorch UserWarning about full_backward_hook firing on outputs
-        # with no requires_grad inputs — the hook still functions correctly here because
-        # we explicitly set requires_grad=True on the target layer's parameters above.
+        # --- Forward pass (need grad enabled for backward to fire the hook) ---
+        # We suppress the benign "Full backward hook is firing" UserWarning
+        # (it still fires correctly because target layer params have requires_grad=True).
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -84,67 +102,99 @@ class GradCAM:
             )
             output = self.model(input_tensor)
 
-            if target_class is None:
-                target_class = torch.argmax(output, dim=1).item()
+        # Determine target class from argmax if not specified
+        if target_class is None:
+            target_class = int(torch.argmax(output, dim=1).item())
 
-            # Zero gradients
-            self.model.zero_grad()
+        # Compute softmax probabilities before backward (detached, no grad needed)
+        with torch.no_grad():
+            probs = F.softmax(output.detach(), dim=1)[0].cpu().numpy().copy()
 
-            # Backprop through the target class score
-            score = output[0, target_class]
-            score.backward()
+        # Zero previous gradients and backprop through the target class score only
+        self.model.zero_grad()
+        score = output[0, target_class]
+        score.backward()
 
+        # --- Extract heatmap from captured activations and gradients ---
         if self.gradients is None or self.activations is None:
-            raise RuntimeError("Grad-CAM failed to capture gradients or activations from target layer.")
+            raise RuntimeError(
+                "Grad-CAM failed to capture gradients or activations from target layer."
+            )
 
-        # Pool gradients across spatial channels: shape (C,)
-        pooled_gradients = torch.mean(self.gradients, dim=[0, 2, 3])
+        # Pool gradients across spatial dims → shape (C,)
+        pooled_gradients = self.gradients.mean(dim=[0, 2, 3])  # (C,)
 
-        # Weight activations by pooled gradients
-        activations = self.activations[0]  # shape (C, H, W)
+        # Weight each activation channel by its pooled gradient
+        activations = self.activations[0].clone()   # (C, H, W) — clone to avoid in-place on hook tensor
         for i in range(activations.size(0)):
             activations[i] *= pooled_gradients[i]
 
-        # Compute average across channel dimension
-        heatmap = torch.mean(activations, dim=0).cpu().numpy()
-
-        # Apply ReLU to keep only positive contributions
+        # Average across channels and apply ReLU
+        heatmap = activations.mean(dim=0).cpu().numpy()          # (H, W)
         heatmap = np.maximum(heatmap, 0)
+        if heatmap.max() > 0:
+            heatmap /= heatmap.max()
 
-        # Normalize to [0, 1]
-        if np.max(heatmap) > 0:
-            heatmap /= np.max(heatmap)
+        # --- Explicitly release intermediate tensors ---
+        del pooled_gradients, activations, score, output
+        self.activations = None
+        self.gradients = None
+        gc.collect()
 
-        return heatmap, target_class, F.softmax(output, dim=1)[0].detach().cpu().numpy()
+        return heatmap, target_class, probs
 
 
-def overlay_heatmap(heatmap, original_pil_image, alpha=0.5):
+# ---------------------------------------------------------------------------
+# Overlay helpers
+# ---------------------------------------------------------------------------
+
+def overlay_heatmap(heatmap: np.ndarray, display_pil: Image.Image, alpha: float = 0.5):
     """
-    Blends Grad-CAM heatmap with original PIL Image using OpenCV Jet colormap.
+    Blend a Grad-CAM heatmap with a PIL image.
+
+    display_pil should already be resized to model input size (64×64) to keep
+    intermediate NumPy arrays small and avoid up-sampling large upload images.
+
+    Returns: (overlay_pil, heatmap_pil) — both PIL Images at display_pil size.
     """
-    w, h = original_pil_image.size
-    # Resize heatmap to match image dimensions
+    w, h = display_pil.size
     heatmap_resized = cv2.resize(heatmap, (w, h))
-
-    # Convert to 8-bit heatmap image
     heatmap_uint8 = np.uint8(255 * heatmap_resized)
 
-    # Apply Jet color map
     color_heatmap = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
     color_heatmap = cv2.cvtColor(color_heatmap, cv2.COLOR_BGR2RGB)
 
-    # Blend original image with heatmap
-    orig_np = np.array(original_pil_image)
+    orig_np = np.array(display_pil, dtype=np.uint8)
     blended = np.uint8(alpha * orig_np + (1.0 - alpha) * color_heatmap)
 
-    return Image.fromarray(blended), Image.fromarray(color_heatmap)
+    overlay_pil = Image.fromarray(blended)
+    heatmap_pil = Image.fromarray(color_heatmap)
+
+    # Free large NumPy arrays
+    del orig_np, blended, color_heatmap, heatmap_resized, heatmap_uint8
+
+    return overlay_pil, heatmap_pil
 
 
-def explain_prediction(model, image_pil, target_layer=None, input_tensor=None, input_size=(64, 64), device="cpu"):
+# ---------------------------------------------------------------------------
+# High-level API
+# ---------------------------------------------------------------------------
+
+def explain_prediction(
+    model,
+    image_pil: Image.Image,
+    target_layer=None,
+    input_tensor=None,
+    input_size=(64, 64),
+    device="cpu",
+):
     """
-    High-level API for model prediction explanation.
-    Uses unified preprocess_image to ensure input tensor is strictly [1, 3, 64, 64].
-    Returns: (predicted_class_id, top_3_probs, overlay_image, heatmap_image)
+    Run Grad-CAM and return prediction results.
+
+    Key memory optimisation: overlay_heatmap is called at model input_size (64×64),
+    not at the original upload resolution (which can be up to 4096×4096).
+
+    Returns: (predicted_class_id, top3_preds, overlay_image, heatmap_image)
     """
     if target_layer is None:
         if hasattr(model, "get_last_conv_layer"):
@@ -158,20 +208,20 @@ def explain_prediction(model, image_pil, target_layer=None, input_tensor=None, i
         else:
             if input_tensor.dim() != 4 or tuple(input_tensor.shape) != (1, 3, input_size[0], input_size[1]):
                 raise ValueError(
-                    f"Invalid input_tensor shape for inference: expected (1, 3, {input_size[0]}, {input_size[1]}), "
-                    f"but got {tuple(input_tensor.shape)}"
+                    f"Invalid input_tensor shape: expected (1, 3, {input_size[0]}, {input_size[1]}), "
+                    f"got {tuple(input_tensor.shape)}"
                 )
             input_tensor = input_tensor.to(device)
 
         heatmap, predicted_class, probs = grad_cam.generate_heatmap(input_tensor)
+        # grad_cam context exits here — hooks removed, tensors cleared
 
-    # Generate overlay image matching the exact input_size
-    overlay_img, heatmap_img = overlay_heatmap(
-        heatmap,
-        image_pil.convert("RGB").resize(input_size, Image.BILINEAR)
-    )
+    # Build display image at model input size (64×64) to keep NumPy arrays tiny
+    display_pil = image_pil.convert("RGB").resize(input_size, Image.BILINEAR)
+    overlay_img, heatmap_img = overlay_heatmap(heatmap, display_pil)
+    del display_pil, heatmap
 
-    # Top-3 predictions
+    # Top-3 predictions sorted by probability
     top3_indices = np.argsort(probs)[::-1][:3]
     top3_preds = [(int(idx), float(probs[idx])) for idx in top3_indices]
 

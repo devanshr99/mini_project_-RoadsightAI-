@@ -1,10 +1,12 @@
 import os
 import sys
+import gc
 import io
 import time
 import json
 import csv
 import base64
+import threading
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
 from PIL import Image
@@ -24,27 +26,50 @@ from src.inference import TrafficSignPredictor
 
 app = Flask(__name__, static_folder="experiments/plots")
 
-# Allowed upload extensions
+# Enforce 10 MB upload limit at Flask level (Render will also honor this)
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+# Allowed upload extensions and byte-level size cap
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp"}
-MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB limit
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_IMAGE_DIM = 4096                 # pixels
+MIN_IMAGE_DIM = 16                   # pixels
 
 
-# In-memory predictor cache with single-model residency to prevent OOM on 512MB hosts (Render)
+# ---------------------------------------------------------------------------
+# In-memory predictor cache — single-model residency to prevent OOM on
+# Render's 512 MB free tier.  A threading.Lock prevents concurrent requests
+# from loading two models at the same time.
+# ---------------------------------------------------------------------------
 class PredictorCache:
-    def __init__(self, max_cache_size: int = 1):
-        self._cache = {}
-        self.max_cache_size = max_cache_size
+    def __init__(self):
+        self._cache: dict = {}
+        self._lock = threading.Lock()
 
-    def get_predictor(self, model_name: str) -> TrafficSignPredictor:
+    def get_predictor(self, model_name: str) -> "TrafficSignPredictor":
         canonical_key = resolve_model_key(model_name)
-        if canonical_key not in self._cache:
-            # Evict prior model and force garbage collection before loading the new one
+
+        # Fast path — model already resident, no lock needed for read
+        if canonical_key in self._cache:
+            return self._cache[canonical_key]
+
+        # Slow path — acquire lock so only one thread loads at a time
+        with self._lock:
+            # Double-checked locking: another thread may have loaded while we waited
+            if canonical_key in self._cache:
+                return self._cache[canonical_key]
+
+            # Evict the previous model before loading the new one to free RAM
             if self._cache:
-                self._cache.clear()
-                import gc
+                old_key = next(iter(self._cache))
+                predictor = self._cache.pop(old_key)
+                # Release model tensors immediately
+                try:
+                    del predictor.model
+                except Exception:
+                    pass
+                del predictor
                 gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
 
             checkpoint_path = get_checkpoint_for_model(canonical_key)
             if not os.path.exists(checkpoint_path):
@@ -54,7 +79,7 @@ class PredictorCache:
             self._cache[canonical_key] = TrafficSignPredictor(
                 model_name=canonical_key,
                 checkpoint_path=checkpoint_path,
-                img_dim=64
+                img_dim=64,
             )
         return self._cache[canonical_key]
 
@@ -222,6 +247,7 @@ def predict():
     Main inference endpoint.
     Accepts multipart/form-data with 'image' file or JSON with 'image_base64'.
     Performs preprocessing, inference, and Grad-CAM generation.
+    Memory-safe: single image_bytes copy, explicit cleanup in finally block.
     """
     if request.method == "OPTIONS":
         return "", 200
@@ -239,61 +265,76 @@ def predict():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    # Image extraction
+    # --- Image extraction (single read, no duplicate copies) ---
+    image_bytes = None
     pil_image = None
-    if "image" in request.files:
-        file = request.files["image"]
-        if file.filename == "":
-            return jsonify({"error": "No selected file"}), 400
-        
-        ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-        if ext not in ALLOWED_EXTENSIONS:
-            return jsonify({
-                "error": f"Invalid file format '{ext}'. Supported formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            }), 400
+    width = height = 0
+    result = None
 
-        try:
+    try:
+        if "image" in request.files:
+            file = request.files["image"]
+            if file.filename == "":
+                return jsonify({"error": "No selected file"}), 400
+
+            ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+            if ext not in ALLOWED_EXTENSIONS:
+                return jsonify({
+                    "error": f"Invalid file format '{ext}'. Supported formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                }), 400
+
             image_bytes = file.read()
-            if len(image_bytes) > MAX_CONTENT_LENGTH:
-                return jsonify({"error": "File size exceeds 10MB limit"}), 400
-            pil_image = Image.open(io.BytesIO(image_bytes))
-        except Exception as e:
-            return jsonify({"error": f"Could not read image file: {str(e)}"}), 400
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                return jsonify({"error": "File size exceeds 10 MB limit"}), 413
 
-    elif request.is_json and "image_base64" in request.json:
-        b64_data = request.json["image_base64"]
-        if "," in b64_data:
-            b64_data = b64_data.split(",", 1)[1]
+        elif request.is_json and request.json and "image_base64" in request.json:
+            b64_data = request.json["image_base64"]
+            if "," in b64_data:
+                b64_data = b64_data.split(",", 1)[1]
+            try:
+                image_bytes = base64.b64decode(b64_data)
+            except Exception as e:
+                return jsonify({"error": f"Invalid base64 image data: {str(e)}"}), 400
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                return jsonify({"error": "Base64 image exceeds 10 MB limit"}), 413
+        else:
+            return jsonify({"error": "No image provided. Upload a file as 'image' or send 'image_base64'"}), 400
+
+        # Open image once — pil_image.load() fully decodes and we can release raw bytes
         try:
-            image_bytes = base64.b64decode(b64_data)
             pil_image = Image.open(io.BytesIO(image_bytes))
+            pil_image.load()           # fully decode into memory now
+            pil_image = pil_image.convert("RGB")  # normalize mode, drop alpha channel
         except Exception as e:
-            return jsonify({"error": f"Invalid base64 image data: {str(e)}"}), 400
-    else:
-        return jsonify({"error": "No image provided. Upload an image file as 'image' or send 'image_base64'"}), 400
+            return jsonify({"error": f"Corrupt or unreadable image: {str(e)}"}), 400
+        finally:
+            del image_bytes            # release raw bytes immediately after decode
+            image_bytes = None
 
-    # Validate image dimensions and mode
-    try:
-        pil_image.verify()
-        # Reopen because verify() closes the file
-        pil_image = Image.open(io.BytesIO(image_bytes))
-    except Exception as e:
-        return jsonify({"error": f"Corrupt or unreadable image: {str(e)}"}), 400
+        width, height = pil_image.size
+        if width < MIN_IMAGE_DIM or height < MIN_IMAGE_DIM:
+            return jsonify({"error": f"Image too small ({width}x{height}). Minimum {MIN_IMAGE_DIM}x{MIN_IMAGE_DIM} px."}), 400
+        if width > MAX_IMAGE_DIM or height > MAX_IMAGE_DIM:
+            return jsonify({"error": f"Image too large ({width}x{height}). Maximum {MAX_IMAGE_DIM}x{MAX_IMAGE_DIM} px."}), 400
 
-    width, height = pil_image.size
-    if width < 16 or height < 16:
-        return jsonify({"error": f"Image dimensions too small ({width}x{height}). Minimum is 16x16 pixels."}), 400
-    if width > 4096 or height > 4096:
-        return jsonify({"error": f"Image dimensions too large ({width}x{height}). Maximum is 4096x4096 pixels."}), 400
+        # Run inference with cached predictor
+        try:
+            predictor = predictor_cache.get_predictor(model_key)
+            result = predictor.predict(pil_image)
+        except FileNotFoundError as e:
+            return jsonify({"error": str(e), "model_status": "checkpoint_missing"}), 404
+        except Exception as e:
+            return jsonify({"error": f"Inference execution failed: {str(e)}"}), 500
 
-    # Run inference with cached predictor
-    try:
-        predictor = predictor_cache.get_predictor(model_key)
-        result = predictor.predict(pil_image)
-    except FileNotFoundError as e:
-        return jsonify({"error": str(e), "model_status": "checkpoint_missing"}), 404
-    except Exception as e:
-        return jsonify({"error": f"Inference execution failed: {str(e)}"}), 500
+    finally:
+        # Always release PIL image after inference, even on exception
+        if pil_image is not None:
+            del pil_image
+            pil_image = None
+        gc.collect()
+
+    if result is None:
+        return jsonify({"error": "Inference returned no result"}), 500
 
     elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
     result["inference_latency_ms"] = elapsed_ms
@@ -301,7 +342,6 @@ def predict():
     result["is_valid"] = True
 
     # Add low-confidence warning so the frontend can display user guidance.
-    # Threshold: < 70% confidence is considered ambiguous for GTSRB classes.
     confidence = result.get("confidence", 0)
     result["low_confidence"] = confidence < 70.0
     if result["low_confidence"]:
@@ -310,7 +350,6 @@ def predict():
             f"partially visible, or out-of-distribution. "
             f"Try ResNet18 for higher accuracy on difficult images."
         )
-    # Recommend the most accurate available model for user guidance
     result["model_recommendation"] = "resnet18"
 
     return jsonify(result)
