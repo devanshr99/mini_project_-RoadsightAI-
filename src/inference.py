@@ -1,3 +1,13 @@
+"""
+TrafficSignPredictor — inference engine for RoadSight AI.
+
+Memory contract (designed for Render free tier: 512 MB total):
+  - Single model resident at a time (enforced by PredictorCache in app.py).
+  - Checkpoint dict freed immediately after state_dict copy.
+  - input_tensor deleted in finally block after Grad-CAM.
+  - PIL images and BytesIO buffers closed after base64 encoding.
+  - gc.collect() called at end of every predict() call.
+"""
 import gc
 import os
 import json
@@ -13,14 +23,6 @@ from src.explain import explain_prediction
 
 
 class TrafficSignPredictor:
-    """
-    Inference service for loading trained models and performing predictions with Grad-CAM explainability.
-    Enforces explicit architecture-to-checkpoint mapping, strict state_dict loading, and standardized
-    preprocessing.  Uses torch.inference_mode() for plain forward pass to avoid building a gradient
-    graph (saves ~50% peak RAM vs autograd mode).  Grad-CAM temporarily re-enables gradients only
-    on the target layer.
-    """
-
     def __init__(self, model_name="custom_cnn", checkpoint_path=None, img_dim=64):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_name = resolve_model_key(model_name)
@@ -30,55 +32,60 @@ class TrafficSignPredictor:
         if checkpoint_path is None:
             checkpoint_path = get_checkpoint_for_model(self.model_name)
 
-        self.checkpoint_path = checkpoint_path
+        self.checkpoint_path = str(checkpoint_path)
         self.class_names = self._load_class_names()
         self.model = self._load_model()
-        self.transform = get_transforms(input_size=self.input_size, is_training=False)
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private
     # ------------------------------------------------------------------
 
-    def _load_class_names(self):
-        class_file = "data/class_names.json"
-        if os.path.exists(class_file):
-            with open(class_file, "r") as f:
+    def _load_class_names(self) -> dict:
+        path = "data/class_names.json"
+        if os.path.exists(path):
+            with open(path, "r") as f:
                 return json.load(f)
         return {str(i): f"Class {i}" for i in range(43)}
 
     def _load_model(self):
-        # 1. Instantiate the correct architecture BEFORE loading its model_state_dict
+        """
+        Load model weights with minimal peak RAM:
+          1. Instantiate empty model on CPU (no pretrained weights → no download).
+          2. torch.load() the checkpoint.
+          3. load_state_dict() — only the model_state_dict subtensor is copied.
+          4. del checkpoint dict immediately → frees optimizer state, scheduler, etc.
+          5. gc.collect() to return freed pages to OS promptly.
+        """
+        num_classes = len(self.class_names)
         model = get_model(
             model_name=self.model_name,
-            num_classes=len(self.class_names),
+            num_classes=num_classes,
             pretrained=False,
         ).to(self.device)
 
         if not os.path.exists(self.checkpoint_path):
             raise FileNotFoundError(
-                f"[Inference Engine] Checkpoint '{self.checkpoint_path}' not found "
-                f"for architecture '{self.model_name}'."
+                f"Checkpoint '{self.checkpoint_path}' not found for '{self.model_name}'."
             )
 
-        # 2. Load weights — use weights_only=True to avoid pickle RCE and reduce RAM
-        #    (skips optimizer state; model_state_dict only).
+        # weights_only=False required for older checkpoint dicts that contain non-tensor values
         checkpoint = torch.load(
             self.checkpoint_path,
             map_location=self.device,
-            weights_only=False,  # weights_only=True breaks on older checkpoints with extra keys
+            weights_only=False,
         )
+
         if "model_state_dict" not in checkpoint:
-            raise KeyError(
-                f"Checkpoint '{self.checkpoint_path}' is missing 'model_state_dict'"
-            )
+            raise KeyError(f"'model_state_dict' missing in '{self.checkpoint_path}'")
 
         model.load_state_dict(checkpoint["model_state_dict"], strict=True)
         print(
-            f"[Inference Engine] Loaded '{self.model_name}' from "
-            f"'{self.checkpoint_path}' (strict=True)"
+            f"[Predictor] Loaded '{self.model_name}' "
+            f"from '{os.path.basename(self.checkpoint_path)}' (strict=True, device={self.device})"
         )
 
-        # Free checkpoint dict immediately — optimizer states can be 2–3× model size
+        # Free the checkpoint dict — releases optimizer states and any extra keys.
+        # This is the single most impactful RAM saving (up to 128 MB for ResNet18).
         del checkpoint
         gc.collect()
 
@@ -86,37 +93,34 @@ class TrafficSignPredictor:
         return model
 
     # ------------------------------------------------------------------
-    # Public API
+    # Public
     # ------------------------------------------------------------------
 
     def predict(self, image_pil: Image.Image) -> dict:
         """
-        Run prediction + Grad-CAM on a PIL Image.
+        Full prediction + Grad-CAM for one image.
 
-        Memory management:
-        - input_tensor is deleted as soon as Grad-CAM finishes.
-        - BytesIO buffers for base64 encoding are closed after use.
-        - gc.collect() is called at the end of the request.
+        Every large intermediate (input_tensor, PIL images, BytesIO buffers) is
+        explicitly deleted and gc.collect() is called at the end.
         """
         if not isinstance(image_pil, Image.Image):
             image_pil = Image.fromarray(image_pil)
         if image_pil.mode != "RGB":
             image_pil = image_pil.convert("RGB")
 
-        # Preprocess → [1, 3, 64, 64] tensor
-        input_tensor = preprocess_image(image_pil, input_size=self.input_size, device=self.device)
+        # Preprocess → [1,3,64,64] on self.device
+        input_tensor = preprocess_image(
+            image_pil, input_size=self.input_size, device=self.device
+        )
 
-        expected_shape = (1, 3, self.input_size[0], self.input_size[1])
-        if tuple(input_tensor.shape) != expected_shape:
+        expected = (1, 3, self.input_size[0], self.input_size[1])
+        if tuple(input_tensor.shape) != expected:
             raise ValueError(
-                f"Input tensor shape mismatch: expected {expected_shape}, "
-                f"got {tuple(input_tensor.shape)}"
+                f"Tensor shape {tuple(input_tensor.shape)} != expected {expected}"
             )
 
+        overlay_img = heatmap_img = None
         try:
-            # Grad-CAM: explain_prediction handles forward + backward internally.
-            # It enables gradients only on the target layer, so the full graph is
-            # not retained for all other parameters.
             predicted_class_id, top3_preds, overlay_img, heatmap_img = explain_prediction(
                 model=self.model,
                 image_pil=image_pil,
@@ -125,12 +129,12 @@ class TrafficSignPredictor:
                 device=self.device,
             )
         finally:
-            # Always free the input tensor after Grad-CAM, success or failure
             del input_tensor
             gc.collect()
 
-        top_pred_name = self.class_names.get(str(predicted_class_id), f"Class {predicted_class_id}")
-        top_pred_conf = top3_preds[0][1] * 100.0
+        # Class name and confidence
+        top_name = self.class_names.get(str(predicted_class_id), f"Class {predicted_class_id}")
+        top_conf = round(top3_preds[0][1] * 100.0, 2)
 
         formatted_top3 = [
             {
@@ -141,31 +145,29 @@ class TrafficSignPredictor:
             for class_id, prob in top3_preds
         ]
 
-        # Encode overlay and heatmap to base64, then close BytesIO buffers
-        gradcam_base64 = self._pil_to_b64(overlay_img)
-        heatmap_base64 = self._pil_to_b64(heatmap_img)
-
-        # Release PIL images as soon as they're encoded
+        # Encode to base64 and immediately release PIL images + BytesIO buffers
+        gradcam_b64 = self._encode_b64(overlay_img)
+        heatmap_b64 = self._encode_b64(heatmap_img)
         del overlay_img, heatmap_img
         gc.collect()
 
         return {
             "predicted_class_id": predicted_class_id,
-            "predicted_class_name": top_pred_name,
-            "confidence": round(top_pred_conf, 2),
+            "predicted_class_name": top_name,
+            "confidence": top_conf,
             "top3_predictions": formatted_top3,
-            "gradcam_overlay_b64": gradcam_base64,
-            "heatmap_b64": heatmap_base64,
+            "gradcam_overlay_b64": gradcam_b64,
+            "heatmap_b64": heatmap_b64,
             "model_name": self.model_name,
             "checkpoint_loaded": self.checkpoint_path,
         }
 
     @staticmethod
-    def _pil_to_b64(pil_img: Image.Image) -> str:
-        """Encode a PIL image to a data-URL base64 string, then free the buffer."""
+    def _encode_b64(pil_img: Image.Image) -> str:
+        """PNG-encode a PIL image to a data-URL base64 string, then close the buffer."""
         buf = BytesIO()
         try:
             pil_img.save(buf, format="PNG", optimize=True)
-            return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
+            return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
         finally:
             buf.close()
